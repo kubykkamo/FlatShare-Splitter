@@ -48,3 +48,15 @@ class DatabaseManager:
                     FOREIGN KEY (roommate_id) REFERENCES roommates(id) ON DELETE CASCADE
                 );
             """)
+
+    def save_roommate(self, roommate):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO roommates (name) VALUES (?)",
+                (roommate.name,)
+            )
+
+            roommate.id = c.lastrowid
+            print(f"{roommate.name} saved with id {roommate.id}.")
+

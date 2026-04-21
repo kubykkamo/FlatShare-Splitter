@@ -116,3 +116,4 @@ class Household:
                 j += 1
 
         return settlements
+

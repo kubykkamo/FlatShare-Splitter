@@ -1,5 +1,6 @@
 import sqlite3
-from models import Roommate, Transaction
+from models import Roommate, Transaction, Household
+
 
 class DatabaseManager:
     def __init__(self, db_path: str = 'data.db'):
@@ -60,3 +61,20 @@ class DatabaseManager:
             roommate.id = c.lastrowid
             print(f"{roommate.name} saved with id {roommate.id}.")
 
+
+    def load_all_roommates(self):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT * FROM roommates")
+
+            data = c.fetchall()
+            roommates = []
+
+            for item in data:
+                roommate = Roommate(name=item['name'], id=item['id'])
+                # print(f"{roommate.name} loaded with id {roommate.id}.")
+                roommates.append(roommate)
+
+
+            return roommates

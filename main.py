@@ -1,11 +1,8 @@
 from models import Roommate, Transaction, Household
-from storage import DatabaseManager as db
+from storage import DatabaseManager
 
 # 1. Vytvoření spolubydlících
-adam = Roommate("Adam")
-bara = Roommate("Bára")
-cyril = Roommate("Cyril")
-dan = Roommate("Dan")
+"""
 
 vsichni = [adam, bara, cyril, dan]
 
@@ -72,6 +69,10 @@ for debtor, creditor, amount in settlements:
     celkem_transakci += 1
 
 print(f"\nZe 10 účtenek jsme udělali pouze {celkem_transakci} bankovních převodů!")
+
+"""
+
+
 
 
 

@@ -78,3 +78,19 @@ class DatabaseManager:
 
 
             return roommates
+
+    def save_transaction(self, transaction):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO transactions (payer_id, amount, description, created_at) VALUES (?, ?, ?, ?)",
+                (transaction.payer.id, transaction.amount, transaction.description, transaction.date)
+            )
+
+            transaction.id = c.lastrowid
+            for roommate in transaction.involved:
+                c.execute(
+                    "INSERT INTO transaction_involved (transaction_id, roommate_id) VALUES (?, ?)",
+                    (transaction.id, roommate.id)
+                )
+

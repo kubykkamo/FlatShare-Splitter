@@ -1,24 +1,42 @@
 from models import Roommate, Transaction, Household
 from storage import DatabaseManager
 
-db = DatabaseManager()
-db.get_connection()
 
-roommates = db.load_all_roommates()
+def test_flow():
+    # 1. Startujeme
+    db = DatabaseManager('test_data.db')
 
-household = Household()
+    # 2. Vložíme testovací data (můžeš zakomentovat, až to spustíš podruhé)
+    r1 = Roommate("Adam", id=None)
+    r2 = Roommate("Bára", id=None)
+    db.save_roommate(r1)
+    db.save_roommate(r2)
 
-for r in roommates:
-    household.add_roommate(r)
+    t1 = Transaction(payer=r1, amount=500.0, description="Nákup", involved=[r1, r2])
+    db.save_transaction(t1)
 
-adam = household.roommates[1]
+    print("--- DATA ULOŽENA DO SQLITE ---")
 
-transaction = Transaction(payer = household.roommates[0], amount = 500, description='Nakup', involved=[adam])
+    # 3. KONTROLA NAČÍTÁNÍ
+    # Nejdřív lidi
+    loaded_roommates = db.load_all_roommates()
+    r_dict = {r.id: r for r in loaded_roommates}
 
-household.add_transaction(Transaction(payer=household.roommates[1], amount=500, description='Nakup', involved=[household.roommates[0], household.roommates[2]]))
+    # Pak transakce
+    loaded_transactions = db.load_all_transactions(r_dict)
 
-household.add_transaction(transaction)
+    print(f"Načteno transakcí: {len(loaded_transactions)}")
 
-db.save_transaction(transaction)
+    for t in loaded_transactions:
+        print(f"Platba: {t.description}")
+        print(f"  Platil: {t.payer.name} (objekt typu {type(t.payer)})")
+        print(f"  Zúčastnění: {[r.name for r in t.involved]}")
+
+        # HLAVNÍ TEST: Je plátce stejná instance jako v seznamu zúčastněných?
+        # V Pythonu operátor 'is' kontroluje, zda jde o stejné místo v paměti
+        is_same = t.payer is r_dict[t.payer.id]
+        print(f"  Je instance plátce v pořádku? {'ANO' if is_same else 'NE - chyba v logice!'}")
 
 
+if __name__ == "__main__":
+    test_flow()

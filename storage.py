@@ -137,4 +137,18 @@ class DatabaseManager:
 
                 transactions.append(t)
         return transactions
-    
+
+    def load_all_data(self):
+
+        all_roommates = self.load_all_roommates()
+
+        r_dict = {r.id: r for r in all_roommates}
+
+        all_transactions = self.load_all_transactions(r_dict)
+
+        household = Household()
+
+        household.roommates = all_roommates
+        household.transactions = all_transactions
+
+        return household

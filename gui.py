@@ -103,7 +103,13 @@ class App:
             command=self.open_add_transaction_dialog
         ).pack(pady=10, fill=X)
 
-        # Zde později přidáme výpis zůstatků a tlačítka "Přidat..."
+        # Tlačítko pro spuštění výpočtu vyrovnání
+        tb.Button(
+            right_frame,
+            text="✨ Vypočítat vyrovnání",
+            bootstyle=WARNING,
+            command=self.show_settlement_dialog
+        ).pack(pady=30, fill=X)  # pady=30 ho trochu víc oddělí od ostatních
 
     def open_add_transaction_dialog(self):
         # Ochrana: Nesmíme přidávat platbu, když v bytě nikdo nebydlí
@@ -188,6 +194,30 @@ class App:
 
         # Ukládací tlačítko
         tb.Button(dialog, text="Uložit platbu", bootstyle=SUCCESS, command=save_transaction).pack(pady=20)
+
+    def show_settlement_dialog(self):
+        # 1. Zavoláme tvůj dokonalý backend algoritmus
+        settlements = self.household.calculate_settlement()
+
+        # 2. Vykreslení okna
+        dialog = tb.Toplevel(self.root)
+        dialog.title("Konečné vyrovnání")
+        dialog.geometry("400x500")
+
+        tb.Label(dialog, text="Kdo komu dluží?", font=("Helvetica", 16, "bold")).pack(pady=20)
+
+        # 3. Zpracování tvých dat do UI
+        if not settlements:
+            tb.Label(dialog, text="Všichni jsou vyrovnaní! 🎉", font=("Helvetica", 12), bootstyle=SUCCESS).pack(pady=20)
+        else:
+            # Rozbalíme tvůj Tuple (debtor, creditor, amount) přímo v cyklu
+            for debtor, creditor, amount in settlements:
+                # Tady si GUI rozhoduje, jak to chce vypsat
+                vysledny_text = f"{debtor.name} ➔ pošle ➔ {creditor.name}: {amount:.2f} Kč"
+
+                tb.Label(dialog, text=vysledny_text, font=("Helvetica", 12, "bold"), bootstyle=DANGER).pack(pady=10)
+
+        tb.Button(dialog, text="Zavřít", bootstyle=SECONDARY, command=dialog.destroy).pack(pady=30)
 
     def open_add_roommate_dialog(self):
         # Vytvoření nového okna na popředí (Toplevel)

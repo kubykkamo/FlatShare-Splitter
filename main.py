@@ -4,12 +4,14 @@ from storage import DatabaseManager
 
 def test_flow():
     # 1. Startujeme
-    db = DatabaseManager('data.db')
+    db = DatabaseManager('test_data.db')
 
     household = db.load_all_data()
 
-    settlements = household.calculate_settlement()
+    print(household.calculate_settlement())
 
-    print(settlements)
+    for t in household.transactions:
+        print(t.description)
+
 if __name__ == "__main__":
     test_flow()

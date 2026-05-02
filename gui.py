@@ -63,10 +63,12 @@ class App:
         # Tady vytěžíme tvoji skvělou práci na backendu
         for t in self.household.transactions:
 
-            time = datetime.fromisoformat(t.date)
+            if t.date:
+                time = datetime.fromisoformat(t.date)
 
-            polished_date = time.strftime("%d.%m.%Y %H:%M")
-
+                polished_date = time.strftime("%d.%m.%Y %H:%M")
+            else:
+                polished_date = "No date"
             self.tree.insert("", END ,values=(
                 polished_date,
                 t.payer.name,  # Vidíš? Saháme přímo do objektu Roommate!
@@ -93,7 +95,99 @@ class App:
             command=self.open_add_roommate_dialog  # Tady říkáme, co se má stát po kliknutí
         ).pack(pady=10, fill=X)
 
+        # Tlačítko pro přidání platby (dáme mu jinou barvu, třeba modrou - INFO)
+        tb.Button(
+            right_frame,
+            text="+ Přidat platbu",
+            bootstyle=INFO,
+            command=self.open_add_transaction_dialog
+        ).pack(pady=10, fill=X)
+
         # Zde později přidáme výpis zůstatků a tlačítka "Přidat..."
+
+    def open_add_transaction_dialog(self):
+        # Ochrana: Nesmíme přidávat platbu, když v bytě nikdo nebydlí
+        if not self.household.roommates:
+            print("Nejdřív přidej aspoň jednoho spolubydlícího!")
+            return
+
+        dialog = tb.Toplevel(self.root)
+        dialog.title("Nová platba")
+        dialog.geometry("400x550")
+
+        # 1. KDO PLATIL (Roletka / Combobox)
+        tb.Label(dialog, text="Kdo to platil:").pack(pady=(10, 0))
+        # Vytáhneme si jen jména lidí do seznamu pro roletku
+        jmena_lidi = [r.name for r in self.household.roommates]
+        payer_combo = tb.Combobox(dialog, values=jmena_lidi, state="readonly")
+        payer_combo.pack(pady=5, padx=20, fill=X)
+        payer_combo.current(0)  # Nastavíme výchozího prvního člověka
+
+        # 2. ČÁSTKA A POPIS
+        tb.Label(dialog, text="Částka (Kč):").pack(pady=(10, 0))
+        amount_entry = tb.Entry(dialog)
+        amount_entry.pack(pady=5, padx=20, fill=X)
+
+        tb.Label(dialog, text="Za co to bylo (Popis):").pack(pady=(10, 0))
+        desc_entry = tb.Entry(dialog)
+        desc_entry.pack(pady=5, padx=20, fill=X)
+
+        # 3. KDO SE PODÍLÍ (Generování Checkboxů)
+        tb.Label(dialog, text="Koho se to týká (včetně plátce):").pack(pady=(15, 5))
+
+        # Tady si schováme proměnné checkboxů. Klíč bude ID člověka, hodnota stav (True/False)
+        checkbox_vars = {}
+        for r in self.household.roommates:
+            var = tb.BooleanVar(value=True)  # Ve výchozím stavu zaškrtneme všechny
+            checkbox_vars[r.id] = var
+            # bootstyle="round-toggle" udělá místo nudného čtverečku hezký přepínač
+            tb.Checkbutton(dialog, text=r.name, variable=var, bootstyle="round-toggle").pack(anchor=W, padx=40, pady=2)
+
+        # Vnitřní funkce pro uložení
+        def save_transaction():
+            vybrane_jmeno = payer_combo.get()
+            popis = desc_entry.get().strip()
+
+            # Bezpečnostní kontrola, jestli uživatel nenapsal místo čísla text
+            try:
+                castka = float(amount_entry.get().strip())
+            except ValueError:
+                print("Chyba: Částka musí být číslo!")
+                return
+
+                # Najdeme reálný objekt plátce podle vybraného jména
+            platce_objekt = next((r for r in self.household.roommates if r.name == vybrane_jmeno), None)
+
+            # Posbíráme zaškrtnuté lidi
+            zapojeni_lidi = []
+            for r in self.household.roommates:
+                # Zkontrolujeme, jestli je checkbox pro tohle ID zaškrtnutý (get() vrací True/False)
+                if checkbox_vars[r.id].get() == True:
+                    zapojeni_lidi.append(r)
+
+            # Pokud máme všechno podstatné, uložíme to
+            if platce_objekt and castka > 0 and zapojeni_lidi and popis:
+                from models import Transaction
+                # Vytvoříme novou transakci. ID a datum si vygeneruje databáze
+
+                time = datetime.now().isoformat()
+
+                # Předáme ho místo None
+                nova_platba = Transaction(
+                    id=None, payer=platce_objekt, amount=castka,
+                    description=popis, date=time, involved=zapojeni_lidi
+                )
+
+                # Uložení a překreslení (stejný postup jako u osoby)
+                self.db.save_transaction(nova_platba)
+                self.household = self.db.load_all_data()
+                self.build_ui()
+                dialog.destroy()
+            else:
+                print("Chyba: Nevyplnil jsi všechny údaje (nebo jsi nevybral žádné lidi).")
+
+        # Ukládací tlačítko
+        tb.Button(dialog, text="Uložit platbu", bootstyle=SUCCESS, command=save_transaction).pack(pady=20)
 
     def open_add_roommate_dialog(self):
         # Vytvoření nového okna na popředí (Toplevel)

@@ -40,6 +40,24 @@ class App:
             font=("Helvetica", 16, "bold")
         ).pack(anchor=W, pady=(0, 10))  # anchor=W znamená zarovnání doleva (West)
 
+        # === FILTROVACÍ LIŠTA ===
+        filter_frame = tb.Frame(left_frame)
+        filter_frame.pack(fill=X, pady=(0, 10))
+
+        tb.Label(filter_frame, text="Od:").pack(side=LEFT, padx=(0, 5))
+        # Kalendář pro počáteční datum (s vynuceným českým formátem)
+        self.date_from = tb.DateEntry(filter_frame, bootstyle=PRIMARY, dateformat="%d.%m.%Y")
+        self.date_from.pack(side=LEFT, padx=(0, 15))
+
+        tb.Label(filter_frame, text="Do:").pack(side=LEFT, padx=(0, 5))
+        # Kalendář pro koncové datum
+        self.date_to = tb.DateEntry(filter_frame, bootstyle=PRIMARY, dateformat="%d.%m.%Y")
+        self.date_to.pack(side=LEFT, padx=(0, 15))
+
+        # Tlačítko, které zatím nic nedělá, ale brzy bude spouštět filtrování
+        # V metodě build_ui uprav tlačítko "Filtrovat" takto:
+        tb.Button(filter_frame, text="Filtrovat", bootstyle=SECONDARY, command=self.apply_filter).pack(side=LEFT)
+
         # Vytvoření samotné tabulky (Treeview)
         columns = ("date", "payer", "amount", "description")
         self.tree = tb.Treeview(left_frame, columns=columns, show="headings", bootstyle=INFO)
@@ -195,9 +213,45 @@ class App:
         # Ukládací tlačítko
         tb.Button(dialog, text="Uložit platbu", bootstyle=SUCCESS, command=save_transaction).pack(pady=20)
 
+    def apply_filter(self):
+        date_from_str = self.date_from.entry.get()
+        date_to_str = self.date_to.entry.get()
+
+        from datetime import datetime
+        try:
+            # Převedeme text z kalendáře na opravdový čas
+            start_date = datetime.strptime(date_from_str, "%d.%m.%Y")
+            # U koncového data nastavíme čas na 23:59:59, ať to vezme i platby z toho večera
+            end_date = datetime.strptime(date_to_str, "%d.%m.%Y").replace(hour=23, minute=59, second=59)
+        except ValueError:
+            print("Špatný formát data v kalendáři.")
+            return
+
+        # 1. Vytvoříme si nový, vyfiltrovaný list plateb
+        self.displayed_transactions = []
+        for t in self.household.transactions:
+            if t.date:
+                tx_date = datetime.fromisoformat(t.date)
+                if start_date <= tx_date <= end_date:
+                    self.displayed_transactions.append(t)
+
+        # 2. Vymažeme staré řádky v tabulce (get_children vrátí ID všech řádků)
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        # 3. Naplníme tabulku jen vyfiltrovanými platbami
+        for t in self.displayed_transactions:
+            skutecny_cas = datetime.fromisoformat(t.date)
+            hezke_datum = skutecny_cas.strftime("%d.%m.%Y %H:%M")
+            self.tree.insert("", "end", values=(hezke_datum, t.payer.name, f"{t.amount:.2f} Kč", t.description))
+
     def show_settlement_dialog(self):
-        # 1. Zavoláme tvůj dokonalý backend algoritmus
-        settlements = self.household.calculate_settlement()
+        # Trik: Zkusíme vzít vyfiltrované platby. Pokud uživatel ještě neklikl na "Filtrovat"
+        # (takže proměnná neexistuje), vezmeme záchrannou brzdu a použijeme všechny platby.
+        txs_to_calculate = getattr(self, 'displayed_transactions', self.household.transactions)
+
+        # Předáme ten konkrétní list do tvého backendu
+        settlements = self.household.calculate_settlement(txs_to_calculate)
 
         # 2. Vykreslení okna
         dialog = tb.Toplevel(self.root)

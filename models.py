@@ -48,36 +48,30 @@ class Household:
     def add_transaction(self, transaction: Transaction):
         self.transactions.append(transaction)
 
-    def calculate_balances(self) -> Dict[Roommate, float]:
-        """
-        Vypočítá aktuální čistý zůstatek každého spolubydlícího.
-        Kladné číslo = ostatní mu dluží (věřitel).
-        Záporné číslo = on dluží ostatním (dlužník).
-        """
-        # Inicializace zůstatků na 0.0
+    def calculate_balances(self, transactions_list=None) -> Dict[Roommate, float]:
+        # Pokud nepředáme specifický list, použijeme všechny platby z databáze
+        txs = transactions_list if transactions_list is not None else self.transactions
+
         balances = {r: 0.0 for r in self.roommates}
 
-        for t in self.transactions:
-            # 1. Plátci přičteme celou částku, kterou zaplatil (je v plusu)
+        # DŮLEŽITÉ: Tady teď iterujeme přes 'txs', ne přes 'self.transactions'!
+        for t in txs:
             if t.payer in balances:
                 balances[t.payer] += t.amount
 
-            # 2. Všem zúčastněným (včetně plátce, pokud se účastní) odečteme jejich podíl
             if t.involved:
                 split_amount = t.amount / len(t.involved)
                 for r in t.involved:
                     if r in balances:
                         balances[r] -= split_amount
 
-        # Zaokrouhlíme na 2 desetinná místa, abychom se vyhnuli float nepřesnostem (např. 0.00000000001)
         return {r: round(bal, 2) for r, bal in balances.items()}
-
-    def calculate_settlement(self) -> List[Tuple[Roommate, Roommate, float]]:
+    def calculate_settlement(self, transactions_list=None) -> List[Tuple[Roommate, Roommate, float]]:
         """
         Vypočítá minimální počet transakcí pro vyrovnání dluhů.
         Vrací list tuplů ve formátu: (Kdo_posílá, Komu_posílá, Částka)
         """
-        balances = self.calculate_balances()
+        balances = self.calculate_balances(transactions_list)
 
         # Rozdělíme lidi na dlužníky a věřitele
         # Ukládáme jako [Roommate, částka] (částku si u dlužníků převedeme na absolutní hodnotu)

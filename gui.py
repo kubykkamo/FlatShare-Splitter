@@ -1,5 +1,6 @@
 import ttkbootstrap as tb
 from ttkbootstrap.constants import *
+from ttkbootstrap.widgets import ToastNotification
 from storage import DatabaseManager
 from datetime import datetime
 
@@ -10,10 +11,10 @@ class App:
 
         # Nastavení hlavního okna
         self.root.title("FlatShare Splitter")
-        self.root.geometry("800x600")  # Výchozí velikost okna
+        self.root.geometry("1280x800")  # Výchozí velikost okna
 
         # 1. Načtení dat z backendu hned při startu
-        print("Načítám data z databáze do GUI...")
+        self.show_toast("Načítám data z databáze do GUI...", True)
         self.household = self.db.load_all_data()
 
         # 2. Zavoláme metodu, která začne skládat prvky na obrazovku
@@ -57,6 +58,7 @@ class App:
         # Tlačítko, které zatím nic nedělá, ale brzy bude spouštět filtrování
         # V metodě build_ui uprav tlačítko "Filtrovat" takto:
         tb.Button(filter_frame, text="Filtrovat", bootstyle=SECONDARY, command=self.apply_filter).pack(side=LEFT)
+
 
         # Vytvoření samotné tabulky (Treeview)
         columns = ("date", "payer", "amount", "description")
@@ -132,12 +134,12 @@ class App:
     def open_add_transaction_dialog(self):
         # Ochrana: Nesmíme přidávat platbu, když v bytě nikdo nebydlí
         if not self.household.roommates:
-            print("Nejdřív přidej aspoň jednoho spolubydlícího!")
+            self.show_toast("Nejdřív přidej aspoň jednoho spolubydlícího!", False)
             return
 
         dialog = tb.Toplevel(self.root)
         dialog.title("Nová platba")
-        dialog.geometry("400x550")
+        dialog.geometry("400x700")
 
         # 1. KDO PLATIL (Roletka / Combobox)
         tb.Label(dialog, text="Kdo to platil:").pack(pady=(10, 0))
@@ -162,7 +164,7 @@ class App:
         # Tady si schováme proměnné checkboxů. Klíč bude ID člověka, hodnota stav (True/False)
         checkbox_vars = {}
         for r in self.household.roommates:
-            var = tb.BooleanVar(value=True)  # Ve výchozím stavu zaškrtneme všechny
+            var = tb.BooleanVar(value=False)  # Ve výchozím stavu zaškrtneme všechny
             checkbox_vars[r.id] = var
             # bootstyle="round-toggle" udělá místo nudného čtverečku hezký přepínač
             tb.Checkbutton(dialog, text=r.name, variable=var, bootstyle="round-toggle").pack(anchor=W, padx=40, pady=2)
@@ -176,7 +178,8 @@ class App:
             try:
                 castka = float(amount_entry.get().strip())
             except ValueError:
-                print("Chyba: Částka musí být číslo!")
+
+                self.show_toast("Chyba: Částka musí být číslo!", False)
                 return
 
                 # Najdeme reálný objekt plátce podle vybraného jména
@@ -203,12 +206,15 @@ class App:
                 )
 
                 # Uložení a překreslení (stejný postup jako u osoby)
+
                 self.db.save_transaction(nova_platba)
                 self.household = self.db.load_all_data()
                 self.build_ui()
                 dialog.destroy()
+                self.show_toast("Platba uložena!", True)
+
             else:
-                print("Chyba: Nevyplnil jsi všechny údaje (nebo jsi nevybral žádné lidi).")
+                self.show_toast("Chybně zadané údaje!", False)
 
         # Ukládací tlačítko
         tb.Button(dialog, text="Uložit platbu", bootstyle=SUCCESS, command=save_transaction).pack(pady=20)
@@ -224,7 +230,7 @@ class App:
             # U koncového data nastavíme čas na 23:59:59, ať to vezme i platby z toho večera
             end_date = datetime.strptime(date_to_str, "%d.%m.%Y").replace(hour=23, minute=59, second=59)
         except ValueError:
-            print("Špatný formát data v kalendáři.")
+            self.show_toast("Špatný formát data v kalendáři.", False)
             return
 
         # 1. Vytvoříme si nový, vyfiltrovaný list plateb
@@ -306,9 +312,36 @@ class App:
 
                 # 5. Zavřeme vyskakovací okno
                 dialog.destroy()
+                self.show_toast(f"Spolubydlící '{name}' uložen!", True)
+            else:
+                self.show_toast("Zadej jméno nového spolubydlícího!", False)
 
         # Tlačítko, které to celé spustí
         tb.Button(dialog, text="Uložit", bootstyle=PRIMARY, command=save_data).pack(pady=10)
+
+    def show_toast(self, message: str, success: bool):
+        # 1. Vytvoříme obyčejný Label (štítek)
+        # Parametr inverse-style zaručí, že bude mít plnou barvu pozadí (třeba zelenou)
+        if success:
+            style = "success"
+        else:
+            style = "danger"
+        toast_label = tb.Label(
+            self.root,
+            text=message,
+            bootstyle=f"inverse-{style}",
+            padding=10,
+            font=("Helvetica", 10, "bold")
+        )
+
+        # 2. Umístíme ho "plovoucí" přímo do hlavního okna
+        # relx=0.5 a rely=0.9 znamená: 50% šířky okna (uprostřed) a 90% výšky (dole)
+        toast_label.place(relx=0.5, rely=0.9, anchor="center")
+
+        # 3. Řekneme oknu, ať ten štítek za 3 sekundy (3000 milisekund) smaže
+        self.root.after(3000, toast_label.destroy)
+
+
 
 # Spouštěcí blok
 if __name__ == "__main__":

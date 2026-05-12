@@ -5,16 +5,16 @@ from datetime import datetime
 @dataclass
 class Roommate:
     name: str
-    id: Optional[int] = None  # ID se bude hodit později pro propojení s databází
+    id: Optional[int] = None  # Primární klíč z DB
 
     def __hash__(self):
-        # Abychom mohli Roommate používat jako klíče ve slovníku
+        # Nutné pro fungování Roommate jako klíče v dictu (např. v balances)
         return hash((self.id, self.name))
 
     def __eq__(self, other):
         if not isinstance(other, Roommate):
             return False
-        # Pokud mají ID, porovnáváme podle ID (z DB), jinak podle jména
+        # Fallback na jméno, pokud ještě objekt nemá ID z databáze
         if self.id and other.id:
             return self.id == other.id
         return self.name == other.name
@@ -30,14 +30,14 @@ class Transaction:
 
 class Household:
     """
-    Hlavní doménová třída spravující stav a logiku výpočtů.
+    Třída zapouzdřující logiku výpočtů dluhů a správu dat v paměti.
     """
     def __init__(self):
         self.roommates: List[Roommate] = []
         self.transactions: List[Transaction] = []
 
     def load_data(self, roommates: List[Roommate], transactions: List[Transaction]):
-        """Pomocná metoda pro prvotní naplnění daty ze storage."""
+        """Inicializace dat načtených z databáze."""
         self.roommates = roommates
         self.transactions = transactions
 
@@ -49,12 +49,11 @@ class Household:
         self.transactions.append(transaction)
 
     def calculate_balances(self, transactions_list=None) -> Dict[Roommate, float]:
-        # Pokud nepředáme specifický list, použijeme všechny platby z databáze
+        # Zpracuje buď vyfiltrovaný list (pro konkrétní časový úsek) nebo všechny transakce
         txs = transactions_list if transactions_list is not None else self.transactions
 
         balances = {r: 0.0 for r in self.roommates}
 
-        # DŮLEŽITÉ: Tady teď iterujeme přes 'txs', ne přes 'self.transactions'!
         for t in txs:
             if t.payer in balances:
                 balances[t.payer] += t.amount
@@ -66,48 +65,43 @@ class Household:
                         balances[r] -= split_amount
 
         return {r: round(bal, 2) for r, bal in balances.items()}
+
     def calculate_settlement(self, transactions_list=None) -> List[Tuple[Roommate, Roommate, float]]:
         """
-        Vypočítá minimální počet transakcí pro vyrovnání dluhů.
-        Vrací list tuplů ve formátu: (Kdo_posílá, Komu_posílá, Částka)
+        Greedy algoritmus pro minimalizaci počtu transakcí při závěrečném vyrovnání.
+        Vrací: list[(Kdo_posílá, Komu_posílá, Částka)]
         """
         balances = self.calculate_balances(transactions_list)
 
-        # Rozdělíme lidi na dlužníky a věřitele
-        # Ukládáme jako [Roommate, částka] (částku si u dlužníků převedeme na absolutní hodnotu)
+        # Rozdělení na dlužníky (záporný balance) a věřitele (kladný balance)
         debtors = [[r, abs(bal)] for r, bal in balances.items() if bal < -0.01]
         creditors = [[r, bal] for r, bal in balances.items() if bal > 0.01]
 
-        # Seřadíme sestupně podle velikosti dluhu/pohledávky pro mírnou optimalizaci
+        # Seřazení od největších částek pro efektivnější párování (minimalizace počtu transakcí)
         debtors.sort(key=lambda x: x[1], reverse=True)
         creditors.sort(key=lambda x: x[1], reverse=True)
 
         settlements = []
-
-        i = 0  # Ukazatel pro dlužníky
-        j = 0  # Ukazatel pro věřitele
+        i, j = 0, 0
 
         while i < len(debtors) and j < len(creditors):
             debtor, debt_amount = debtors[i]
             creditor, credit_amount = creditors[j]
 
-            # Vyrovnáme maximum možného mezi těmito dvěma
-            settle_amount = min(debt_amount, credit_amount)
-            settle_amount = round(settle_amount, 2)
+            # Spárujeme co největší možnou částku mezi těmito dvěma
+            settle_amount = round(min(debt_amount, credit_amount), 2)
 
             if settle_amount > 0:
                 settlements.append((debtor, creditor, settle_amount))
 
-            # Aktualizujeme zbývající částky
+            # Odečtení vyrovnané částky ze zbývajícího dluhu/pohledávky
             debtors[i][1] = round(debt_amount - settle_amount, 2)
             creditors[j][1] = round(credit_amount - settle_amount, 2)
 
-            # Pokud má dlužník splaceno, posuneme se na dalšího
+            # Posun na další osobu, pokud má dotyčný srovnáno na nulu
             if debtors[i][1] <= 0:
                 i += 1
-            # Pokud je věřitel uspokojen, posuneme se na dalšího
             if creditors[j][1] <= 0:
                 j += 1
 
         return settlements
-

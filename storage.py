@@ -3,22 +3,21 @@ from models import Roommate, Transaction, Household
 
 
 class DatabaseManager:
-    def __init__(self, db_path: str = 'data.db'):
+    def __init__(self, db_path: str = 'test_data.db'):
         self.db_path = db_path
         self._init_db()
 
     def get_connection(self) -> sqlite3.Connection:
-        """Vytvoří připojení a bezpečně zapne cizí klíče."""
+        """Vytvoří spojení a vynutí kontrolu cizích klíčů (SQLite je má v základu vypnuté)."""
         conn = sqlite3.connect(self.db_path)
-        # SQLite specifikum: pro interpretaci row objektů jako slovníků (lepší práce s daty)
+        # Nastavení, aby databáze vracela řádky jako slovníky (dá se k nim přistupovat přes klíče)
         conn.row_factory = sqlite3.Row
-        # Zásadní zapnutí kaskádování a cizích klíčů
+        # Nutné pro fungování ON DELETE CASCADE
         conn.execute("PRAGMA foreign_keys = ON;")
         return conn
 
     def _init_db(self):
-        """Vytvoří tabulky, pokud ještě neexistují."""
-
+        """Příprava tabulek při úplně prvním spuštění aplikace."""
         with self.get_connection() as conn:
             c = conn.cursor()
 
@@ -40,11 +39,13 @@ class DatabaseManager:
                 );
             """)
 
+            # Vazební tabulka (kdo všechno se podílel na dané útratě)
             c.execute("""
-                CREATE TABLE IF NOT EXISTS transaction_involved (
-                    transaction_id INTEGER NOT NULL,
-                    roommate_id INTEGER NOT NULL,
-                    PRIMARY KEY (transaction_id, roommate_id),
+                      CREATE TABLE IF NOT EXISTS transaction_involved (
+                  transaction_id INTEGER
+                  NOT NULL,
+                  roommate_id INTEGER NOT NULL,
+                  PRIMARY KEY(transaction_id,roommate_id),
                     FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
                     FOREIGN KEY (roommate_id) REFERENCES roommates(id) ON DELETE CASCADE
                 );
@@ -57,25 +58,22 @@ class DatabaseManager:
                 "INSERT INTO roommates (name) VALUES (?)",
                 (roommate.name,)
             )
-
+            # Uložení přiděleného primárního klíče zpět do objektu
             roommate.id = c.lastrowid
             print(f"{roommate.name} saved with id {roommate.id}.")
-
 
     def load_all_roommates(self):
         with self.get_connection() as conn:
             c = conn.cursor()
-            c.execute(
-                "SELECT * FROM roommates")
+            c.execute("SELECT * FROM roommates")
 
             data = c.fetchall()
             roommates = []
 
             for item in data:
                 roommate = Roommate(name=item['name'], id=item['id'])
-                # print(f"{roommate.name} loaded with id {roommate.id}.")
+                # print(f"{roommate.name} loaded with id {roommate.id}.")  # debug
                 roommates.append(roommate)
-
 
             return roommates
 
@@ -88,30 +86,30 @@ class DatabaseManager:
             )
 
             transaction.id = c.lastrowid
-            # inserting record for every roommate involved in transaction
+
+            # Zápis do vazební tabulky pro každého, koho se platba týkala
             for roommate in transaction.involved:
                 c.execute(
                     "INSERT INTO transaction_involved (transaction_id, roommate_id) VALUES (?, ?)",
                     (transaction.id, roommate.id)
                 )
 
-
     def load_all_transactions(self, roommates_dict):
-
         with self.get_connection() as conn:
             c = conn.cursor()
-            c.execute(
-                "SELECT * FROM transactions t"
-            )
+            c.execute("SELECT * FROM transactions t")
 
             data = c.fetchall()
             transactions = []
+
             for item in data:
+                # Dohledání objektu plátce přes dictionary (rychlejší než dělat další JOIN v SQL)
                 p_id = item['payer_id']
                 payer_object = roommates_dict[p_id]
 
                 current_transaction_id = item['id']
 
+                # Vytažení všech lidí zapojených do této konkrétní transakce
                 c.execute(
                     "SELECT roommate_id FROM transaction_involved WHERE transaction_id = ?",
                     (current_transaction_id,)
@@ -131,23 +129,21 @@ class DatabaseManager:
                     description=item['description'],
                     date=item['created_at'],
                     involved=involved_list
-
                 )
 
-
                 transactions.append(t)
+
         return transactions
 
     def load_all_data(self):
-
         all_roommates = self.load_all_roommates()
 
+        # Vytvoření slovníku {id: objekt} pro rychlejší párování transakcí s lidmi při načítání
         r_dict = {r.id: r for r in all_roommates}
 
         all_transactions = self.load_all_transactions(r_dict)
 
         household = Household()
-
         household.roommates = all_roommates
         household.transactions = all_transactions
 

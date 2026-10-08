@@ -1,0 +1,2 @@
+# GUI framework (themed wrapper around tkinter). Pulls in Pillow automatically.
+ttkbootstrap>=1.10
